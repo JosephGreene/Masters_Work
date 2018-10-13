@@ -2,7 +2,7 @@
 F = @(x) fftshift(fft2(ifftshift(x)));
 iF = @(x) fftshift(ifft2(ifftshift(x)));
 acrr= @(x) iF(conj(F(x)).*F(x)); %autocorrelation using fourier transform (much faster)
-pre = @(x) (x-mean(x))/norm(x); %Preprocessing step to normalize input data for autocorrelation
+pre = @(x) (x)/norm(x); %Preprocessing step to normalize input data for autocorrelation
 
 
 %Physical parameters of miniscope (unchagable) in real space
@@ -14,7 +14,8 @@ Nyquest = lambda/(4*NA0); %Nyquest requirement for incoherent system for compari
 pixel = 0.003; %ideal pixel size in mm
 mag = 10; %magnification of system
 dx = pixel/mag; %Real space 'pixel' size in mm
-N = 401; %desired # of pixels, make odd so we can see exact center
+N = 301; %desired # of pixels, make odd so we can see exact center
+M = ceil(N/2);
 fov = N*dx; %N = 1000 in this case
 [xx,yy] = meshgrid([-N/2:N/2-1]*dx); %Spatial grid for use generating phase mask
 DoF = 2*(lambda/(NA0^2)); %Native depth of field in this system
@@ -25,12 +26,12 @@ NAx = uu*lambda; %converting to NA space (alottable angles) -> unitless! easy of
 NAy = vv*lambda;
 NA = sqrt(NAx.^2+NAy.^2); %NA @ any given point
 %% Loop to compare range of defocus of Axicon for different parameters
-dz = [-0.015:0.00025:0.015];
+dz = [-0.5:0.0005:0.005];
 ip_axi = zeros(1,length(dz));
 %3D Matrix that will hold 2D slices representing PSF at certain output
 EDoF = zeros(N,N,length(dz));
 
-for n = 0:2:10
+for n = 0
     %Generate mask and OTF/MTF
     if n == 0
         alpha = 0;
@@ -45,6 +46,10 @@ for n = 0:2:10
     imagesc(binaxi)
     title(['binary axicon with n = ' num2str(n)])
     colorbar
+    figure
+    imagesc(OTF_axi);
+    title(['binary axicon OTF with n = ' num2str(n)])
+    colorbar
     %Generate defocus
     for k = 1:length(dz)
         defocus = dz(k);%Defocus distance
@@ -56,10 +61,47 @@ for n = 0:2:10
     figure
     %Plot PSF for all dz @ y = 0 to determine depth of field created by this axicon
     %Center of Output is at N due to autocorrelation length being 2N-1
-    imagesc(dz,1:N,squeeze(real(EDoF(:,floor(N/2)+1,:))))%squeeze compresses slice of 3d into 2d
+    imagesc(dz,M-50:M+50,squeeze(real(EDoF(M-50:M+50,M,:))))%squeeze compresses slice of 3d into 2d
     xlabel('Field depth, mm')
     ylabel('cross section of iPSF @ y = 0')
     title(['output @ y= 0|n = ' num2str(n)])
     colorbar
+
     %plot(ip_axi./max(ip_axi))
+end
+
+%% Generate 3D object to use with iPSF generated -> Waleed's code
+addpath('Waleeds_3D_Object')
+[len, width] = size(dz);
+simobj = sim_obj(N,N,width,8,[1]);
+
+%% Generate Output!
+%Recall imager is 2D so the imager will see the convolution in x,y and
+%projection in z. I.E summation of 2D convolution
+convolved = zeros(size(EDoF));
+[x,y,z] = size(convolved);
+for i = 1:z
+    convolved(:,:,i) = iF(F(squeeze(EDoF(:,:,i))).*F(squeeze(simobj(:,:,i)))); 
+end
+
+imager = sum((convolved),3);
+figure
+imagesc(abs(imager))
+title('imager reading')
+
+% ref = sum(simobj,3);
+% figure
+% imagesc(ref)
+% title('reference')
+% 
+on_axis_OTF = F(squeeze(EDoF(:,:,1001)));
+figure
+imagesc(abs((iF((conj(on_axis_OTF).*F(imager))./(abs(on_axis_OTF).^2+0.006)))))
+title('reconstruction')
+%% Approximation Error
+approxe = ones(1,7);
+for u = 10.^[-3:3]
+    i = 1;
+    approxe(i) = norm(conj(on_axis_OTF).*F(imager)./(abs(on_axis_OTF).^2+u).*ref-ref);
+    i= i+1;
 end
