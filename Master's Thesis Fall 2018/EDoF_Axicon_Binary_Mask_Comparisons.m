@@ -1,4 +1,10 @@
 %% Binary Axicon EDoF properties
+%{
+    First code designing an EDoF phase mask for incoherent/flourescent
+    emission detection for neural tissue in mice. The goal of this code is
+    to determine the EDoF for different binary mask designs (of an axicon)
+    in a noiseless chunk of neural tissue.
+%}
 F = @(x) fftshift(fft2(ifftshift(x)));
 iF = @(x) fftshift(ifft2(ifftshift(x)));
 acrr= @(x) iF(conj(F(x)).*F(x)); %autocorrelation using fourier transform (much faster)
@@ -26,7 +32,7 @@ NAx = uu*lambda; %converting to NA space (alottable angles) -> unitless! easy of
 NAy = vv*lambda;
 NA = sqrt(NAx.^2+NAy.^2); %NA @ any given point
 %% Loop to compare range of defocus of Axicon for different parameters
-dz = [-0.5:0.0005:0.005];
+dz = [-0.005:0.0005:0.005];
 ip_axi = zeros(1,length(dz));
 %3D Matrix that will hold 2D slices representing PSF at certain output
 EDoF = zeros(N,N,length(dz));
