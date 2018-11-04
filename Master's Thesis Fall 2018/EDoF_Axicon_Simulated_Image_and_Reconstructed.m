@@ -38,11 +38,15 @@ NA = sqrt(NAx.^2+NAy.^2); %NA @ any given point
 %% Generate Simulated 3D Object of Defocues 'neurons'
 %Generate binary axicon mask
 n = 6.77; %Current param used in practice
-alpha =  NA0^2*f/(n*lambda)*10^-2; %Slope of axicon
+if n == 0
+    alpha = 0;
+else
+    alpha =  NA0^2*f/(n*lambda)*10^-2;
+end
 binaxi = Generate_Binary_Axicon(alpha,NAx,NAy,0);
 
 %Generate 3D Object using waleed's code
-dz = -0.5:0.0005:0.005; %Neural depth in mm
+dz = -0.125:0.0005:0.005; %Neural depth in mm
 addpath('Waleeds_3D_Object')
 [len, width] = size(dz);
 simobj = sim_obj(N,N,width,8,[1]); %Only have one circle with radius 8*pixel/mag per dz slice
@@ -72,8 +76,8 @@ figure
 imagesc(abs(imager))
 title('imager reading')
 
-on_axis_OTF = F(squeeze(EDoF(:,:,1001))); %Initial Reconstuction w/Tikhonov
-rec = abs((iF((conj(on_axis_OTF).*F(imager))./(abs(on_axis_OTF).^2+0.006))));
+on_axis_OTF = F(squeeze(EDoF(:,:,251))); %Initial Reconstuction w/Tikhonov
+rec = abs((iF((conj(on_axis_OTF).*F(imager))./(abs(on_axis_OTF).^2+0.1))));
 figure
 imagesc(rec)
 title('reconstruction')
@@ -105,7 +109,7 @@ ylabel('Approx error')
 title('Total Reference: Approx Error')
 %% Now use a reference where only looking at neurons at depths +- 5 um (reconstruction range)
 u = 10.^[-5:0.25:5];
-newref = sum(simobj(:,:,991:end),3); %Sum last 20 images in simobj as reference
+newref = sum(simobj(:,:,241:end),3); %Sum last 20 images in simobj as reference
 for i = 1:length(u)
     totale(i) = norm(((conj(on_axis_OTF).*F(imager))./(abs(on_axis_OTF).^2.+u(i)))-imager);
     approxe(i) = norm(((conj(on_axis_OTF).*ref)./(abs(on_axis_OTF).^2.+u(i)))-imager);
@@ -161,14 +165,13 @@ new_mask = binaxi.*n1.*n2; %Apply conditions for 2D combined hilbert transform
 figure
 imagesc(new_mask)
 title('Hilbert Mask Design')
-
 hilbert_convolved = zeros(size(EDoF));
 for k = 1:length(dz)
     defocus = dz(k);%Defocus distance
     defocus_prop = exp(1i*pi*lambda*defocus.*(uu.^2+vv.^2)); %Fresnel Kernel
     dOTF_axi = acrr(pre(new_mask.*defocus_prop)); %Defocus OTF
     hilbert_convolved(:,:,k) = iF(dOTF_axi.*F(squeeze(simobj(:,:,k))));%Squeeze converts 3D matrix slice into 2D matrix 
-    if k == 1001
+    if k == 251
         new_on_axis = dOTF_axi; %At dz = 0, keep OTF
     end
 end
@@ -231,7 +234,7 @@ for k = 1:length(dz)
     defocus_prop = exp(1i*pi*lambda*defocus.*(uu.^2+vv.^2)); %Fresnel Kernel
     dOTF_axi = acrr(pre(HPF_mask.*defocus_prop)); %Defocus OTF
     HPF_convolved(:,:,k) = iF(dOTF_axi.*F(squeeze(simobj(:,:,k))));%Squeeze converts 3D matrix slice into 2D matrix 
-    if k == 1001
+    if k == 251
         HPF_on_axis = dOTF_axi; %At dz = 0, keep OTF
     end
 end
@@ -282,10 +285,11 @@ title('Hilbert mask reconstruction: mu = 1')
 %% SBR For Original and New Mask
 %Reference object for 'neurons' in +5um:-Num
 
-for i = 0:0.5:50 %We start at dz = +5um
-    subsim = simobj; 
-    subsim(:,:,1:(length(dz)-i*2)) = 0;%Set undesired 'neurons' to zero
-    subpixels = find(sum(subsim,3)); %find nonzeros indicies for 'imager' reading
+%Determine SBR for each case
+for i = 0:0.5:25 %We start at dz = +5um
+    subslice = simobj(:,:,(length(dz)-i*2)); %get slice at depth
+    subpixels = find(subslice); %find nonzeros indicies for 'imager' reading
+    invpixels = find(~subslice);
 
     sbr_imager(i*2+1) = mean(abs(imager(subpixels)))./mean(abs(imager(:)));
     sbr_rec(i*2+1) = mean(rec(subpixels))./mean(rec(:));
@@ -298,13 +302,14 @@ end
 %% Plot SBR
 figure
 hold on
-plot(0:0.5:50,sbr_imager)
-plot(0:0.5:50,sbr_rec)
-plot(0:0.5:50,sbr_new_rec)
-plot(0:0.5:50,sbr_filt)
-plot(0:0.5:50,sbr_HPF_rec)
+plot(5:-0.5:-20,sbr_imager)
+plot(5:-0.5:-20,sbr_rec)
+plot(5:-0.5:-20,sbr_new_rec)
+plot(5:-0.5:-20,sbr_filt)
+plot(5:-0.5:-20,sbr_HPF_rec)
 hold off
 title('SBR Analysis')
 ylabel('Average SBR')
 xlabel('depth(um)-5(um)')
 legend('Orig. Imag','Orig. Rec','Hilbert rec','Filtered', 'HPF rec')
+set(gca,'Xdir','reverse')

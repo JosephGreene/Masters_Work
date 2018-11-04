@@ -32,12 +32,12 @@ NAx = uu*lambda; %converting to NA space (alottable angles) -> unitless! easy of
 NAy = vv*lambda;
 NA = sqrt(NAx.^2+NAy.^2); %NA @ any given point
 %% Loop to compare range of defocus of Axicon for different parameters
-dz = [-0.005:0.0005:0.005];
+dz = [-0.5:0.0005:0.005];
 ip_axi = zeros(1,length(dz));
 %3D Matrix that will hold 2D slices representing PSF at certain output
 EDoF = zeros(N,N,length(dz));
 
-for n = 0
+for n = 6.77
     %Generate mask and OTF/MTF
     if n == 0
         alpha = 0;
