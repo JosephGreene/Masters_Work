@@ -1,9 +1,11 @@
-%% Binary Axicon EDoF properties
+%% Bessel Beam Analysis of EDoF Binary Axicon
 %{
-    First code designing an EDoF phase mask for incoherent/flourescent
+    Forth code designing an EDoF phase mask for incoherent/flourescent
     emission detection for neural tissue in mice. The goal of this code is
-    to determine the EDoF for different binary mask designs (of an axicon)
-    in a noiseless chunk of neural tissue.
+    to determine whether the beam produces is a bessel beam. This is
+    determined by comparing axial and lateral resolution. A bessel beam
+    elongates axial resolution without changing lateral. Else it is a
+    spherical aberation.
 %}
 F = @(x) fftshift(fft2(ifftshift(x)));
 iF = @(x) fftshift(ifft2(ifftshift(x)));
@@ -25,19 +27,22 @@ M = ceil(N/2);
 fov = N*dx; %N = 1000 in this case
 [xx,yy] = meshgrid([-N/2:N/2-1]*dx); %Spatial grid for use generating phase mask
 DoF = 2*(lambda/(NA0^2)); %Native depth of field in this system
-%% Fourier space
+
+% Fourier space
 du = 1/fov;
 [uu,vv] = meshgrid([-N/2:N/2-1]*du); %In Fourier plane, du is defined as 1/FOV
 NAx = uu*lambda; %converting to NA space (alottable angles) -> unitless! easy of scaling and design
 NAy = vv*lambda;
 NA = sqrt(NAx.^2+NAy.^2); %NA @ any given point
 %% Loop to compare range of defocus of Axicon for different parameters
-dz = [-0.01:0.0005:0.01];
-ip_axi = zeros(1,length(dz));
+depth = 0.01;
+step = 0.0001;
+dz = -depth:step:depth; %small uniform field to check over, smaller dz
 %3D Matrix that will hold 2D slices representing PSF at certain output
 EDoF = zeros(N,N,length(dz));
+FWHM = zeros(1,length(dz));
 
-for n = 6
+for n = 6.77
     %Generate mask and OTF/MTF
     if n == 0
         alpha = 0;
@@ -47,22 +52,28 @@ for n = 6
     binaxi = Generate_Binary_Axicon(alpha,NAx,NAy,0);
     %Generate on-axis MTF
     OTF_axi = acrr(binaxi);
-    MTF_axi = abs(OTF_axi);
-    figure
-    imagesc(binaxi)
-    title(['binary axicon with n = ' num2str(n)])
-    colorbar
-    figure
-    imagesc(OTF_axi);
-    title(['binary axicon OTF with n = ' num2str(n)])
-    colorbar
     %Generate defocus
     for k = 1:length(dz)
         defocus = dz(k);%Defocus distance
         defocus_prop = exp(1i*pi*lambda*defocus.*(uu.^2+vv.^2)); %Fresnel Kernel
         dOTF_axi = acrr(pre(binaxi.*defocus_prop));
         dMTF_axi = abs(dOTF_axi);
-        EDoF(:,:,k) = iF(dOTF_axi);%iPSF = iF{OTF}
+        iPSF = iF(dOTF_axi);
+        EDoF(:,:,k) = iPSF;%iPSF = iF{OTF}
+        
+        %Find FWHM as function of dz
+        maxValue = max(abs(iPSF(:)));
+        % Find where it's more than half the max.
+        aboveHalfMax = abs(EDoF(:,:,k)) > maxValue/2;
+        % Get the first and last index where it's more than the half max.
+        Index = find(aboveHalfMax);
+        if length(Index) == 1
+             FWHM(k) = 0.00005; %If just one pixel, FWHM is within peak pixel
+        else
+             [a,b] = ind2sub([301,301],Index); %Convert from linear indicies
+             %Note, peak in center of bessel will ALWAYS be above FWHM
+             FWHM(k)= max(sqrt(sum(([ceil(N/2),ceil(N/2)] - [a,b]).^2,2)))*0.0003; %Else find the maximum difference between last FWHM pixel and middle
+        end
     end
     figure
     %Plot PSF for all dz @ y = 0 to determine depth of field created by this axicon
@@ -72,42 +83,9 @@ for n = 6
     ylabel('cross section of iPSF @ y = 0')
     title(['output @ y= 0|n = ' num2str(n)])
     colorbar
-
-    %plot(ip_axi./max(ip_axi))
-end
-
-%% Generate 3D object to use with iPSF generated -> Waleed's code
-addpath('Waleeds_3D_Object')
-[len, width] = size(dz);
-simobj = sim_obj(N,N,width,8,[1]);
-
-%% Generate Output!
-%Recall imager is 2D so the imager will see the convolution in x,y and
-%projection in z. I.E summation of 2D convolution
-convolved = zeros(size(EDoF));
-[x,y,z] = size(convolved);
-for i = 1:z
-    convolved(:,:,i) = iF(F(squeeze(EDoF(:,:,i))).*F(squeeze(simobj(:,:,i)))); 
-end
-
-imager = sum((convolved),3);
-figure
-imagesc(abs(imager))
-title('imager reading')
-
-% ref = sum(simobj,3);
-% figure
-% imagesc(ref)
-% title('reference')
-% 
-on_axis_OTF = F(squeeze(EDoF(:,:,1001)));
-figure
-imagesc(abs((iF((conj(on_axis_OTF).*F(imager))./(abs(on_axis_OTF).^2+0.006)))))
-title('reconstruction')
-%% Approximation Error
-approxe = ones(1,7);
-for u = 10.^[-3:3]
-    i = 1;
-    approxe(i) = norm(conj(on_axis_OTF).*F(imager)./(abs(on_axis_OTF).^2+u).*ref-ref);
-    i= i+1;
+    
+    figure
+    plot(-depth:step:depth,FWHM);
+    xlabel('Depth')
+    ylabel('FWHM')
 end

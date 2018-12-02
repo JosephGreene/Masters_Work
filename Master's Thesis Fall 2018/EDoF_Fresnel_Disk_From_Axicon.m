@@ -44,11 +44,12 @@ figure
 imagesc(binaxi)
 title('original mask')
 
+%%
 %Generate 3D Object using waleed's code
-dz = -0.125:0.0005:0.005; %Neural depth in mm -> note I reduce total depth to speed up code form prev ex
+dz = -0.1:0.0005:0.005; %Neural depth in mm -> note I reduce total depth to speed up code form prev ex
 addpath('Waleeds_3D_Object')
 [len, width] = size(dz);
-simobj = sim_obj(N,N,width,8,[1]); %Only have one circle with radius 8*pixel/mag per dz slice
+simobj = sim_obj(N,N,width,2,[2]); %Only have one circle with radius 8*pixel/mag per dz slice
 
 %% Fresnel Disk 1: Binary Axicon with Inner circle set to pi shift
 %Generate iPSF at every declared dz depth (adjusted for full neural depth)
@@ -62,17 +63,17 @@ radii = [0,0.05,0.075,0.314]; %Radius of inner ring increasing at geometric aver
 
 for j = 1:length(radii) %Adjust radius in loop
     image = zeros(N,N);
-    fresnel = binaxi;
-    fresnel(NAx.^2 + NAy.^2 <= radii(j).^2) = -1;
+    new_design = binaxi;
+    new_design(NAx.^2 + NAy.^2 <= radii(j).^2) = -1;
     figure
-    imagesc(fresnel)
-    title(['Fresnel Disk w/ inner radius of NA = ' num2str(radii(j))])
+    imagesc(new_design)
+    title(['New Disk w/ inner radius of NA = ' num2str(radii(j))])
    
     %Determine output image
     for k = 1:length(dz)
         defocus = dz(k);%Defocus distance
         defocus_prop = exp(1i*pi*lambda*defocus.*(uu.^2+vv.^2)); %Fresnel Kernel
-        dOTF = acrr(pre(fresnel.*defocus_prop)); %Defocus OTF
+        dOTF = acrr(pre(new_design.*defocus_prop)); %Defocus OTF
         image = image + iF(dOTF.*F(squeeze(simobj(:,:,k))));%Squeeze converts 3D matrix slice into 2D matrix 
         if dz(k) == 0
             on_axis = dOTF;
